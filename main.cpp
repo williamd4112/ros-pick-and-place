@@ -102,6 +102,7 @@ ending::Matcher::MatchPoints match(cv::Mat &image, cv::Mat &templ, cv::Rect boun
 /*	Global variables */
 Arm * g_arm;
 static ending::MatchingTest * g_matching_test_ptr;
+static std::vector<cv::Rect> g_scale_depth_box;
 static float g_scale;
 static float g_hover_height = ARM_HOVER_Z;
 static float g_pick_height = ARM_HOVER_Z;
@@ -110,7 +111,6 @@ static cv::Mat g_depth_image;
 static rs::intrinsics g_color_intrin;
 static rs::intrinsics g_depth_intrin;
 static rs::extrinsics g_depth_to_color;
-static CMResult_t g_plate;
 static std::mutex g_depth_mutex;
 static rs::float3 g_pointcloud[FRAME_WIDTH * FRAME_HEIGHT];
 static rs::float3 g_origin;
@@ -142,6 +142,10 @@ static struct pick_and_place_config_t {
 	Arm::target_t dst;
 	std::string plate_template_path;
 	
+	/* Retry parameter */
+	float retry_offset;
+	float retry_inteval;
+	
 	/* Matching input */
 	std::vector<char> alphabets;
 	std::vector<cv::Rect> alphabets_bounding_boxs;
@@ -162,9 +166,43 @@ static std::vector<cv::Rect> g_template_box;
 #endif
 //static cv::Rect g_cm_roi(cv::Point2i(102, 64), cv::Point2i(252, 176));
 static cv::Rect g_cm_roi(cv::Point2i(190, 110), cv::Point2i(252, 176));
+static cv::Rect g_cm_search_roi(cv::Point2i(0, 0), cv::Point2i(300, 220));
 static cv::Rect g_plate_roi(cv::Point2i(300, 0), cv::Point2i(640, 480));
 
 static void mouse_handler(int event, int x, int y, int flag, void* param);
+
+static void locate_scaled_depth_box(cv::Mat & img, int area_ts=50)
+{
+	g_scale_depth_box.clear();
+	cv::Mat img_thresh;
+	cv::threshold(img(g_cm_search_roi), img_thresh, 0, 255, CV_THRESH_BINARY);
+
+	std::vector<std::vector<cv::Point> > contours;
+	std::vector<cv::Vec4i> hier;
+
+	cv::findContours(img_thresh, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+	
+	static float scale = 0.2f;
+	std::vector<cv::Moments> mu;
+	for(auto contour : contours) {
+		if (cv::contourArea(contour) > area_ts) {
+			cv::Rect box = cv::boundingRect(contour);
+			box.x -= (box.width / 2) * scale;
+			box.y -= (box.height / 2) * scale;
+			box.width = box.width + (box.width) * scale;;
+			box.height =  box.height + (box.height) * scale;
+			g_scale_depth_box.push_back(box);
+			mu.push_back(cv::moments(contour, false));
+		}
+	}
+}
+
+static void draw_scale_depth_box(cv::Mat & img)
+{
+	for (auto box : g_scale_depth_box) {
+		cv::rectangle(img, box, cv::Scalar(255, 255, 0), 1);
+	}
+}
 
 static void draw_workspace(cv::Mat & img)
 {
@@ -172,6 +210,7 @@ static void draw_workspace(cv::Mat & img)
 		cv::rectangle(img, cv::Point2i(262, 306), cv::Point2i(96, 476), cv::Scalar(0, 0, 255), 3);	  
 		cv::rectangle(img, g_cm_roi, cv::Scalar(0, 255, 0), 3);
 		cv::rectangle(img, g_plate_roi, cv::Scalar(255, 255, 0), 3);
+		cv::rectangle(img, g_cm_search_roi, cv::Scalar(255, 0, 255), 3);
 		
 		for (auto rect : g_template_box) {
 			cv::rectangle(img, rect, cv::Scalar(255, 0, 0), 3);
@@ -280,55 +319,6 @@ static void depth_to_scaled_depth(cv::Mat & in, cv::Mat & out, uint16_t one_mete
 	in.convertTo(out, CV_8U, 255.0 / one_meter);
 }
 
-/*
-	Given a list of candidate templates for CM matcher, return a top-priority target
-*/
-static CMResult_t locate_alphabet_cm_img(cv::Mat & img, std::vector<cv::Mat> & candidates)
-{
-	CMResult_t target;
-	target.found = false;
-	
-	/// TODO : Find a top candidate, for now return last matching
-	for (auto temp : candidates) {
-		std::cout << "Chamfer matching starts" << std::endl;
-		ending::Matcher::MatchPoints result = match(
-				img, 
-				temp, 
-				g_cm_roi);	
-		std::cout << "Chamfer matching done" << std::endl;
-		if (result.size()) {
-			target.found = true;
-			target.x = result[0].getBoundingBoxCenter().x;
-			target.y = result[0].getBoundingBoxCenter().y;
-			target.width = result[0].getBoundingBoxSize().width;
-			target.height = result[0].getBoundingBoxSize().height;
-			target.angle = (result[0].getAngle() / CV_PI * 180.0);
-			target.scale = result[0].getScale();
-			target.cost = result[0].getCost();
-
-			printf("x = %d, y = %d, w = %d, h = %d, angle = %f, scale = %f, cost = %f\n",
-				result[0].getBoundingBoxCenter().x,
-				result[0].getBoundingBoxCenter().y,
-				result[0].getBoundingBoxSize().width,
-				result[0].getBoundingBoxSize().height,
-				deg(result[0].getAngle()),
-				result[0].getScale(),
-				result[0].getCost());
-#ifdef DEBUG
-			g_template_box[0] = cv::Rect(
-				cv::Point2i(
-					result[0].getBoundingBoxCenter().x - result[0].getBoundingBoxSize().width / 2,
-					result[0].getBoundingBoxCenter().y - result[0].getBoundingBoxSize().height / 2),
-				cv::Point2i(
-					result[0].getBoundingBoxCenter().x + result[0].getBoundingBoxSize().width / 2,
-					result[0].getBoundingBoxCenter().y + result[0].getBoundingBoxSize().height / 2));			
-#endif
-		}
-	}
-
-	return target;
-}
-
 static void key_handler(int key, cv::Mat & color_image)
 {
 	switch(key) {
@@ -340,17 +330,6 @@ static void key_handler(int key, cv::Mat & color_image)
 			break;
 		case 'R': case 'r':
 			g_arm->touch(150, 0, 0);
-			break;
-		case 'C': case 'c':
-		{
-			CMResult_t target = locate_alphabet_cm_img(color_image, g_templates);
-			if (target.found) {
-				set_pick_target(target.x, target.y, target.angle);
-			}
-			else {
-				printf("Not found.\n");
-			}
-		}
 			break;
 		case '0':
 		{
@@ -665,6 +644,8 @@ int main(int argc, char * argv[])
 		cv::Mat scale_depth_image;
 		depth_to_scaled_depth(g_depth_image, scale_depth_image, one_meter);
 		
+		locate_scaled_depth_box(scale_depth_image);
+				
 #ifdef VIDEO_PLAYBACK
 		if (!color_image.empty()) {
 			playback.write(color_image);
@@ -672,7 +653,7 @@ int main(int argc, char * argv[])
 #endif
 		cv::Mat _color_image = color_image.clone();
 		draw_workspace(_color_image);
-		
+		draw_scale_depth_box(_color_image);
 #ifdef DEBUG
 		cv::imshow("Color Image", _color_image);
 		cv::imshow("Depth Image", scale_depth_image);

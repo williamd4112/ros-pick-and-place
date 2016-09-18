@@ -1,0 +1,59 @@
+g++ -Wall -std=c++11 -DDEBUG  -D__CHAMFER_DEBUG_MODE___ -DTEST_TEMPLATE -DRETRY -I/home/ubuntu/arm-control/arm/inc -I/home/ubuntu/arm-control/ros/inc -I/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching `pkg-config --cflags opencv` -I/opt/ros/indigo/include -I/home/ubuntu/librealsense-armhf/examples/include -I/home/ubuntu/arm-control/ros/inc -L/home/ubuntu/darknet -L/home/ubuntu/arm-control/arm -L/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching -L/opt/ros/indigo/lib -L/usr/local/cuda-6.5/lib -L/usr/lib main.cpp /home/ubuntu/arm-control/ros/src/ros_wrapper.cpp action.cpp -o ../pick-and-place -lopencv_core -lopencv_imgproc -lopencv_flann  -lopencv_highgui -lopencv_ml -lopencv_video -lopencv_objdetect -lopencv_photo -lopencv_features2d -lopencv_calib3d -lopencv_stitching  -Iinclude -Llib -lrealsense -lroscpp -lrosconsole -lrostime -lroscpp_serialization  -lm `pkg-config --cflags --libs glfw3 glu gl`  -ldarknet -larm -lSource
+In file included from main.cpp:20:0:
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h: In member function 'double ending::Template::reduce(double)':
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:420:11: warning: comparison between signed and unsigned integer expressions [-Wsign-compare]
+     if (i > now){
+           ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:423:16: warning: comparison between signed and unsigned integer expressions [-Wsign-compare]
+     else if (i <= now){
+                ^
+In file included from main.cpp:20:0:
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h: In constructor 'ending::RotationInvariantChamferMatcher::MatcherConfig::MatcherConfig(double, int, double, int, int, int, double, double, double, double, double)':
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2479:11: warning: 'ending::RotationInvariantChamferMatcher::MatcherConfig::_angv' will be initialized after [-Wreorder]
+    double _angv;
+           ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2485:137: warning:   base 'ending::Matcher::MatcherConfig' [-Wreorder]
+     Matcher::MatcherConfig(templScale, maxMatches, minMatchDistance, padX, padY, scales, minScale, maxScale, orientationWeight, truncate){
+                                                                                                                                         ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2482:4: warning:   when initialized here [-Wreorder]
+    MatcherConfig(double templScale = 1, int maxMatches = 20, double minMatchDistance = 1.0, int padX = 3,
+    ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h: In copy constructor 'ending::RotationInvariantChamferMatcher::MatcherConfig::MatcherConfig(const ending::RotationInvariantChamferMatcher::MatcherConfig&)':
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2479:11: warning: 'ending::RotationInvariantChamferMatcher::MatcherConfig::_angv' will be initialized after [-Wreorder]
+    double _angv;
+           ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2489:88: warning:   base 'ending::Matcher::MatcherConfig' [-Wreorder]
+    MatcherConfig(const MatcherConfig &mc) : _angv(mc._angv) , Matcher::MatcherConfig(mc){
+                                                                                        ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2489:4: warning:   when initialized here [-Wreorder]
+    MatcherConfig(const MatcherConfig &mc) : _angv(mc._angv) , Matcher::MatcherConfig(mc){
+    ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h: In constructor 'ending::RotationInvariantChamferMatcher::RotationInvariantChamferMatcher(double, int, double, int, int, int, double, double, double, double, double)':
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2467:20: warning: 'ending::RotationInvariantChamferMatcher::rotation_matrices_' will be initialized after [-Wreorder]
+   RotationMatrices rotation_matrices_;
+                    ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2506:128: warning:   base 'ending::ChamferMatcher' [-Wreorder]
+    ChamferMatcher(templScale, maxMatches, minMatchDistance, padX, padY, scales, minScale, maxScale, orientationWeight, truncate){
+                                                                                                                                ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2503:3: warning:   when initialized here [-Wreorder]
+   RotationInvariantChamferMatcher(double templScale = 1, int maxMatches = 20, double minMatchDistance = 1.0, int padX = 3,
+   ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h: In constructor 'ending::RotationInvariantChamferMatcher::RotationInvariantChamferMatcher(ending::RotationInvariantChamferMatcher::MatcherConfig&)':
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2467:20: warning: 'ending::RotationInvariantChamferMatcher::rotation_matrices_' will be initialized after [-Wreorder]
+   RotationMatrices rotation_matrices_;
+                    ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2510:103: warning:   base 'ending::ChamferMatcher' [-Wreorder]
+   RotationInvariantChamferMatcher(MatcherConfig &mc) : rotation_matrices_(mc._angv), ChamferMatcher(mc){
+                                                                                                       ^
+/home/ubuntu/darknet/ChamferMatchingTest/ChamferMatching/ChamferMatcher.h:2510:3: warning:   when initialized here [-Wreorder]
+   RotationInvariantChamferMatcher(MatcherConfig &mc) : rotation_matrices_(mc._angv), ChamferMatcher(mc){
+   ^
+main.cpp: In function 'int main(int, char**)':
+main.cpp:499:27: error: 'load_cm_tamplate' was not declared in this scope
+   load_cm_tamplate(argv[2]);
+                           ^
+main.cpp: At global scope:
+main.cpp:102:19: warning: 'g_plate' defined but not used [-Wunused-variable]
+ static CMResult_t g_plate;
+                   ^
+make: *** [all] Error 1

@@ -178,6 +178,15 @@ static void draw_workspace(cv::Mat & img)
 			cv::circle(img, cv::Point( (rect.tl().x + rect.br().x)/2, (rect.tl().y + rect.br().y)/2 ), 
 				3, cv::Scalar(0, 0, 255));
 		}
+		
+		cv::circle(img, g_pick_and_place_config.slot_match.getBoundingBoxCenter(), 3, cv::Scalar(0, 0, 255));
+		
+		if (g_pick_and_place_config.alphabet_matches.size()) {
+			if (g_pick_and_place_config.alphabet_matches.front().size()) {
+				auto pick = g_pick_and_place_config.alphabet_matches.front().front();
+				cv::circle(img, pick.getBoundingBoxCenter(), 3, cv::Scalar(0, 0, 255));
+			}
+		}
 	}
 }
 
@@ -353,7 +362,7 @@ static void key_handler(int key, cv::Mat & color_image)
 		case '1':
 		{
 			std::cout << "Locate alphabets begin" << std::endl;
-			g_matching_test_ptr->matchPuzzle(g_pick_and_place_config.alphabets, g_pick_and_place_config.alphabets_bounding_boxs);
+			g_pick_and_place_config.alphabet_matches = g_matching_test_ptr->matchPuzzle(g_pick_and_place_config.alphabets, g_pick_and_place_config.alphabets_bounding_boxs);
 			std::cout << "Locate alphabets end" << std::endl;
 			
 		}
@@ -408,8 +417,7 @@ static void key_handler(int key, cv::Mat & color_image)
 		case '7':
 		{
 			std::cout << "Retry" << std::endl;
-			action_retry(5, 90.0f, 10.0f, 1500000);
-
+			action_retry(1, 15.0f, 10.0f, 100000);
 		}
 			break;
 		case '8':
@@ -427,6 +435,37 @@ static void key_handler(int key, cv::Mat & color_image)
 			std::cout << "Find hole end" << std::endl;
 		}
 			break;
+		case '9':
+		{
+			/* Setup pick target */
+			if (g_pick_and_place_config.alphabet_matches.size()) {
+				auto pick = g_pick_and_place_config.alphabet_matches.front().front();
+				set_pick_target(pick.getBoundingBoxCenter().x,
+								pick.getBoundingBoxCenter().y,
+								deg(pick.getAngle()));
+			}
+			else {
+				std::cout << "No pick target." << std::endl;
+			}
+
+			/* Setup place target */
+			auto place = g_pick_and_place_config.slot_match;
+			set_place_target(place.getBoundingBoxCenter().x, 
+							place.getBoundingBoxCenter().y, 
+							deg(place.getAngle()));
+		
+			printf("Pick(%f, %f, %f, %f)\tPlace(%f, %f, %f, %f)\n",
+				g_pick_and_place_config.src.x, 
+				g_pick_and_place_config.src.y,
+				g_pick_and_place_config.src.z,
+				(g_pick_and_place_config.src.angle),
+				
+				g_pick_and_place_config.dst.x,
+				g_pick_and_place_config.dst.y,
+				g_pick_and_place_config.dst.z,
+				(g_pick_and_place_config.dst.angle));
+		}	
+			break;
 		default:
 			break;
 	}
@@ -440,6 +479,7 @@ static void mouse_handler(int event, int x, int y, int flag, void* param)
 			rs::float3 point = pointcloud_get_point(x, y);
 			printf("Click at (%d, %d) = (%f, %f, %f)\n", x, y,
 					point.x, point.y, point.z);
+			set_pick_target(x, y, 0);
 		}					
 			break;
 		case CV_EVENT_RBUTTONDOWN:

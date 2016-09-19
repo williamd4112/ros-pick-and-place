@@ -137,6 +137,13 @@ static struct camera_calibration_t {
 
 } g_camera_calibration;
 
+struct color_def_t
+{
+	std::string name;
+	cv::Scalar lower;
+	cv::Scalar upper;
+};
+
 static struct pick_and_place_config_t {
 	Arm::target_t src;
 	Arm::target_t dst;
@@ -147,6 +154,7 @@ static struct pick_and_place_config_t {
 	float retry_inteval;
 	
 	/* Matching input */
+	std::vector<color_def_t> color_defs;
 	std::vector<char> alphabets;
 	std::vector<cv::Rect> alphabets_bounding_boxs;
 
@@ -171,32 +179,6 @@ static cv::Rect g_plate_roi(cv::Point2i(300, 0), cv::Point2i(640, 480));
 
 static void mouse_handler(int event, int x, int y, int flag, void* param);
 
-static void locate_scaled_depth_box(cv::Mat & img, int area_ts=50)
-{
-	g_scale_depth_box.clear();
-	cv::Mat img_thresh;
-	cv::threshold(img(g_cm_search_roi), img_thresh, 0, 255, CV_THRESH_BINARY);
-
-	std::vector<std::vector<cv::Point> > contours;
-	std::vector<cv::Vec4i> hier;
-
-	cv::findContours(img_thresh, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
-	
-	static float scale = 0.2f;
-	std::vector<cv::Moments> mu;
-	for(auto contour : contours) {
-		if (cv::contourArea(contour) > area_ts) {
-			cv::Rect box = cv::boundingRect(contour);
-			box.x -= (box.width / 2) * scale;
-			box.y -= (box.height / 2) * scale;
-			box.width = box.width + (box.width) * scale;;
-			box.height =  box.height + (box.height) * scale;
-			g_scale_depth_box.push_back(box);
-			mu.push_back(cv::moments(contour, false));
-		}
-	}
-}
-
 static void draw_scale_depth_box(cv::Mat & img)
 {
 	for (auto box : g_scale_depth_box) {
@@ -208,7 +190,7 @@ static void draw_workspace(cv::Mat & img)
 {
 	if (g_workspace_enable) {
 		cv::rectangle(img, cv::Point2i(262, 306), cv::Point2i(96, 476), cv::Scalar(0, 0, 255), 3);	  
-		cv::rectangle(img, g_cm_roi, cv::Scalar(0, 255, 0), 3);
+		//cv::rectangle(img, g_cm_roi, cv::Scalar(0, 255, 0), 3);
 		cv::rectangle(img, g_plate_roi, cv::Scalar(255, 255, 0), 3);
 		cv::rectangle(img, g_cm_search_roi, cv::Scalar(255, 0, 255), 3);
 		
@@ -319,7 +301,94 @@ static void depth_to_scaled_depth(cv::Mat & in, cv::Mat & out, uint16_t one_mete
 	in.convertTo(out, CV_8U, 255.0 / one_meter);
 }
 
-static void key_handler(int key, cv::Mat & color_image)
+static void locate_scaled_depth_box(cv::Mat & img, int area_ts=50)
+{
+	g_scale_depth_box.clear();
+	cv::Mat img_thresh;
+	cv::threshold(img(g_cm_search_roi), img_thresh, 0, 255, CV_THRESH_BINARY);
+
+	std::vector<std::vector<cv::Point> > contours;
+	std::vector<cv::Vec4i> hier;
+
+	cv::findContours(img_thresh, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+	
+	static float scale = 0.4f;
+	std::vector<cv::Moments> mu;
+	for(auto contour : contours) {
+		if (cv::contourArea(contour) > area_ts) {
+			cv::Rect box = cv::boundingRect(contour);
+			box.x -= (box.width / 2) * scale;
+			box.y -= (box.height / 2) * scale;
+			box.width = box.width + (box.width) * scale;;
+			box.height =  box.height + (box.height) * scale;
+			g_scale_depth_box.push_back(box);
+			mu.push_back(cv::moments(contour, false));
+		}
+	}
+}
+
+static void inRangeHSV(cv::Mat src, cv::Rect box, cv::Scalar lower, cv::Scalar upper, cv::Mat & dst)
+{
+	if (lower.val[0] > upper.val[0]) {
+		cv::Mat mask[2];
+		cv::inRange(src(box), upper, cv::Scalar(179, 255, 255), mask[0]);
+		cv::inRange(src(box), cv::Scalar(0, 100, 100), lower, mask[1]);
+		cv::add(mask[0], mask[1], dst);
+	}
+	else {
+		cv::inRange(src(box), lower, upper, dst);
+	}
+}
+
+static int detect_color(cv::Mat & hsv, cv::Rect box)
+{
+	static int area_ts = 100;
+	int id = -1;
+
+	for (int i = 0; i == -1 && i < g_pick_and_place_config.color_defs.size(); i++) {
+		color_def_t & def = g_pick_and_place_config.color_defs[i];
+		cv::Mat mask;
+		std::vector<std::vector<cv::Point> > contours;
+		std::vector<cv::Vec4i> hier;
+
+		inRangeHSV(hsv, box, def.lower, def.upper, mask);
+#ifdef DEBUG_COLOR
+		cv::imshow(def.name, mask);
+#endif	
+		cv::findContours(mask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+
+		for(auto contour : contours) {
+			int area = cv::contourArea(contour);
+			std::cout << "Detect " << def.name <<  " = " << area << std::endl;
+			if (area > area_ts) {
+				id = i;
+				break;
+			}
+		}
+	}
+	
+	return id;	
+}
+
+static void locate_alphabet_with_scale_depth(cv::Mat & img)
+{
+	cv::Mat hsv;
+	cv::cvtColor(img, hsv, CV_BGR2HSV);
+
+	g_pick_and_place_config.alphabets.clear();
+	g_pick_and_place_config.alphabets_bounding_boxs.clear();	
+
+	for (auto box : g_scale_depth_box) {
+		int color_id = detect_color(hsv, box);
+		std::vector<char> alphabet_candidates = g_matching_test_ptr->getColorList(color_id);
+		for (char ch : alphabet_candidates) {
+			g_pick_and_place_config.alphabets.push_back(ch);
+			g_pick_and_place_config.alphabets_bounding_boxs.push_back(box);
+		}
+	}
+}
+
+static void key_handler(int key, cv::Mat & color_image, cv::Mat & scale_depth_image)
 {
 	switch(key) {
 		case 27:
@@ -330,6 +399,20 @@ static void key_handler(int key, cv::Mat & color_image)
 			break;
 		case 'R': case 'r':
 			g_arm->touch(150, 0, 0);
+			break;
+		case 'D': case 'd':
+		{
+			std::cout << "Locate scaled depth box begin" << std::endl;
+			locate_scaled_depth_box(scale_depth_image);
+			std::cout << "Locate scaled depth box end" << std::endl;
+		}
+			break;
+		case 'F': case 'f':
+		{
+			std::cout << "Test with scaled depth box begin" << std::endl;
+			g_pick_and_place_config.alphabets_bounding_boxs = g_scale_depth_box;
+			std::cout << "Test with scaled depth box end" << std::endl;
+		}
 			break;
 		case '0':
 		{
@@ -499,6 +582,15 @@ static void load_global_config(const char * filename)
 
 	fin >> g_target_height_camera;
 	std::cout << "Target height (camera space) : " << g_target_height_camera << std::endl;
+
+	std::cout << "Color defs" << std::endl;
+	for (int i = 0; i < 7; i++) {
+		color_def_t def;
+		fin >> def.name 
+			>> def.lower.val[0] >> def.lower.val[1] >> def.lower.val[2]
+			>> def.upper.val[0] >> def.upper.val[1] >> def.upper.val[2];
+		g_pick_and_place_config.color_defs.push_back(def);
+	} 
 }
 
 void load_default_config()
@@ -644,7 +736,6 @@ int main(int argc, char * argv[])
 		cv::Mat scale_depth_image;
 		depth_to_scaled_depth(g_depth_image, scale_depth_image, one_meter);
 		
-		locate_scaled_depth_box(scale_depth_image);
 				
 #ifdef VIDEO_PLAYBACK
 		if (!color_image.empty()) {
@@ -659,7 +750,7 @@ int main(int argc, char * argv[])
 		cv::imshow("Depth Image", scale_depth_image);
 
 		int key = cv::waitKey(1) & 0xff;
-		key_handler(key, color_image);
+		key_handler(key, color_image, scale_depth_image);
 		if (key == 10) {
 #ifdef VIDEO_PLAYBACK
 			playback.release();

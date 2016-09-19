@@ -186,14 +186,10 @@ int main(void){
 	
 	cv::Mat image = cv::imread("image.jpg");
 
-	matchtest.setImage(image);
+	cv::cvtColor(image, image, CV_BGR2HSV);
+	matchtest.getImageH(image);
 
-	cv::Rect bbox;
-	bbox = cv::Rect(270,115,360,343);
-
-	matchtest.matchPlate(bbox);
-
-	matchtest.matchHole('I');
+	cv::imshow("image", image);		
 
 	cv::waitKey(0);
 	return 0;
